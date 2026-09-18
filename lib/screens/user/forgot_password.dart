@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../services/globle_method.dart';
+import '../../services/auth_session_controller.dart';
 import 'package:flutter/material.dart';
 import '../../ui_components/app_ui_components.dart';
 
@@ -30,7 +31,7 @@ class ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         }
       } catch (e) {
         if (mounted) {
-          if (e.code == 'user-not-found') {
+          if (e is LocalAuthException && e.code == 'user-not-found') {
             _globalMethods.authErrorHandle(tr('no_account'), context);
           } else {
             _globalMethods.authErrorHandle(e.toString(), context);
