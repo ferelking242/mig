@@ -6,12 +6,12 @@ import '/screens/user/forgot_password.dart';
 import '/provider/settings_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../../services/globle_method.dart';
 import '../../services/flixquest_auth_service.dart';
 import '../../services/bookmark_sync_service.dart';
 import '../../services/auth_navigation_service.dart';
+import '../../services/auth_session_controller.dart';
 import '../../ui_components/app_ui_components.dart';
 import '../../widgets/app_logo.dart';
 import '../../widgets/google_sign_in_button.dart';
@@ -78,7 +78,7 @@ class _LoginScreenState extends State<LoginScreen> {
         context,
         authenticatedUserId: credential.user!.uid,
       );
-    } on FirebaseAuthException catch (error) {
+    } on LocalAuthException catch (error) {
       if (!mounted) return;
       if (error.code == 'wrong-password' ||
           error.code == 'invalid-credential') {
@@ -118,7 +118,7 @@ class _LoginScreenState extends State<LoginScreen> {
         context,
         authenticatedUserId: credential.user!.uid,
       );
-    } on FirebaseAuthException catch (error) {
+    } on LocalAuthException catch (error) {
       if (!mounted) return;
       if (error.code == 'account-exists-with-different-credential') {
         globalMethods.authErrorHandle(tr('google_email_conflict'), context);

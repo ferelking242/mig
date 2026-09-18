@@ -1,13 +1,12 @@
 import 'package:phosphor_flutter/phosphor_flutter.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../provider/settings_provider.dart';
 import '../../services/auth_navigation_service.dart';
+import '../../services/auth_session_controller.dart';
 import '../../services/flixquest_auth_service.dart';
 import '../../ui_components/app_ui_components.dart';
 import '../../widgets/app_logo.dart';
@@ -26,7 +25,7 @@ class UserInfo extends StatefulWidget {
 }
 
 class _UserInfoState extends State<UserInfo> {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  LocalUser? _user;
   String? uid;
   bool? userAnonymous;
 
@@ -37,9 +36,9 @@ class _UserInfoState extends State<UserInfo> {
   }
 
   void _loadUser() {
-    final user = _auth.currentUser;
-    uid = user?.uid;
-    userAnonymous = user?.isAnonymous ?? true;
+    _user = AuthSessionController.instance.currentUser;
+    uid = _user?.uid;
+    userAnonymous = _user?.isAnonymous ?? true;
   }
 
   @override
@@ -48,25 +47,11 @@ class _UserInfoState extends State<UserInfo> {
       return const Center(child: CircularProgressIndicator());
     }
     if (userAnonymous!) return _anonymousProfile();
-    return StreamBuilder<DocumentSnapshot>(
-      stream:
-          FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting &&
-            !snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final data = snapshot.data?.data() as Map<String, dynamic>?;
-        if (snapshot.hasData && snapshot.data!.exists && data != null) {
-          return _profile(data);
-        }
-        return _profile(_fallbackProfile());
-      },
-    );
+    return _profile(_fallbackProfile());
   }
 
   Map<String, dynamic> _fallbackProfile() {
-    final user = _auth.currentUser;
+    final user = _user;
     final email = user?.email ?? '';
     final name = user?.displayName?.trim();
     final localPart = email.split('@').first;
@@ -324,9 +309,8 @@ class _UserInfoState extends State<UserInfo> {
   }
 
   Future<void> _leaveAnonymousSession() async {
-    await _auth.currentUser?.delete();
     await FlixQuestAuthService.signOutGoogle();
-    await _auth.signOut();
+    await FlixQuestAuthService().signOut();
     if (!mounted) return;
     await AuthNavigationService.returnToSignedOutRoot(context);
   }
@@ -413,7 +397,7 @@ class _UserInfoState extends State<UserInfo> {
     context.read<SettingsProvider>().analytics.trackSignOut();
     context.read<SettingsProvider>().analytics.resetUser();
     await FlixQuestAuthService.signOutGoogle();
-    await _auth.signOut();
+    await FlixQuestAuthService().signOut();
     if (!mounted) return;
     await AuthNavigationService.returnToSignedOutRoot(context);
   }

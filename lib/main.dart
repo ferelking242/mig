@@ -4,9 +4,6 @@ import 'package:flixquest/flixquest_main.dart';
 import '../models/translation.dart';
 import '../provider/app_dependency_provider.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_downloader/flutter_downloader.dart';
 // import 'package:media_kit/media_kit.dart';
@@ -26,11 +23,6 @@ import 'singleton/sharedpreferences_singleton.dart';
 import 'tv/platform/device_presentation.dart';
 import 'tv/platform/device_presentation_detector.dart';
 
-@pragma('vm:entry-point')
-Future<void> _messageHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
-}
-
 bool isTablet(BuildContext context) {
   double screenWidth = MediaQuery.of(context).size.width;
   double threshold = 1000.0;
@@ -42,18 +34,6 @@ RecentProvider recentProvider = RecentProvider();
 BookmarkProvider bookmarkProvider = BookmarkProvider();
 AppDependencyProvider appDependencyProvider = AppDependencyProvider();
 WellnessProvider wellnessProvider = WellnessProvider.instance;
-bool firebaseAvailable = false;
-
-Future<bool> _tryInitializeFirebase() async {
-  try {
-    await Firebase.initializeApp().timeout(const Duration(seconds: 8));
-    return true;
-  } catch (error) {
-    debugPrint('Firebase is unavailable; continuing in offline mode: $error');
-    return false;
-  }
-}
-
 bool _isRecoverableImageError(FlutterErrorDetails details) {
   final context = details.context?.toString() ?? '';
   final stack = details.stack?.toString() ?? '';
@@ -80,25 +60,15 @@ Future<DevicePresentation> appInitialize({
     debugPrint('Unable to configure edge-to-edge mode: $error');
   }
 
-  firebaseAvailable = await _tryInitializeFirebase();
-
-  // Surface uncaught Dart and platform errors to Crashlytics. Installed only
-  // after Firebase initialization so the recorder is always ready.
+  // Surface uncaught Dart and platform errors without requiring a cloud
+  // service. The visual app remains usable in fully local/offline mode.
   FlutterError.onError = (details) {
     if (_isRecoverableImageError(details)) return;
-    if (firebaseAvailable) {
-      FirebaseCrashlytics.instance.recordFlutterFatalError(details);
-    } else {
-      FlutterError.dumpErrorToConsole(details);
-    }
+    FlutterError.dumpErrorToConsole(details);
   };
   PlatformDispatcher.instance.onError = (error, stackTrace) {
-    if (firebaseAvailable) {
-      FirebaseCrashlytics.instance.recordError(error, stackTrace, fatal: true);
-    } else {
-      debugPrint('Unhandled platform error: $error');
-      debugPrintStack(stackTrace: stackTrace);
-    }
+    debugPrint('Unhandled platform error: $error');
+    debugPrintStack(stackTrace: stackTrace);
     return true;
   };
 
@@ -132,9 +102,6 @@ Future<DevicePresentation> appInitialize({
   await EasyLocalization.ensureInitialized();
   sharedPrefsSingleton = await SharedPreferencesSingleton.getInstance();
   await clearVideoPlaybackCache();
-  if (firebaseAvailable) {
-    FirebaseMessaging.onBackgroundMessage(_messageHandler);
-  }
   try {
     await FlutterDownloader.initialize(debug: true, ignoreSsl: true);
   } catch (error) {
@@ -173,7 +140,7 @@ Future<DevicePresentation> appInitialize({
   await recentProvider.fetchMovies();
   await recentProvider.fetchEpisodes();
   await bookmarkProvider.fetchBookmarks();
-  await wellnessProvider.initialize(firebaseAvailable: firebaseAvailable);
+  await wellnessProvider.initialize();
   await appDependencyProvider.getFlixQuestLogo();
   await appDependencyProvider.getOccasionalTheme();
   await appDependencyProvider.getAmbientMode();
@@ -181,10 +148,8 @@ Future<DevicePresentation> appInitialize({
   await appDependencyProvider.getTmdbProxy();
   await appDependencyProvider.getUpdateConfiguration();
 
-  if (firebaseAvailable) {
-    await BookmarkSyncService.instance.init();
-    await RecentlyWatchedSyncService.instance.init();
-  }
+  await BookmarkSyncService.instance.init();
+  await RecentlyWatchedSyncService.instance.init();
 
   return devicePresentation;
 }
@@ -257,7 +222,6 @@ class _StartupAppState extends State<_StartupApp> {
             bookmarkProvider: bookmarkProvider,
             appDependencyProvider: appDependencyProvider,
             devicePresentation: snapshot.data!,
-            firebaseAvailable: firebaseAvailable,
           ),
         );
       },

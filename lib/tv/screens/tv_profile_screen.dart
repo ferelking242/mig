@@ -1,10 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../services/auth_navigation_service.dart';
 import '../../services/flixquest_auth_service.dart';
+import '../../services/auth_session_controller.dart';
 import '../app/tv_design.dart';
 import '../focus/tv_focusable.dart';
 import '../widgets/tv_dialog.dart';
@@ -16,7 +15,7 @@ class TvProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = AuthSessionController.instance.currentUser;
     if (user == null || user.isAnonymous) {
       return _ProfileLayout(
         metrics: metrics,
@@ -27,30 +26,12 @@ class TvProfileScreen extends StatelessWidget {
       );
     }
 
-    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      future:
-          FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
-      builder: (context, snapshot) {
-        final data = snapshot.data?.data();
-        final name = data?['name']?.toString().trim();
-        final username = data?['username']?.toString().trim();
-        final profileId = data?['profileId'] is int
-            ? data!['profileId'] as int
-            : int.tryParse(data?['profileId']?.toString() ?? '') ?? 0;
-        return _ProfileLayout(
-          metrics: metrics,
-          name: name == null || name.isEmpty
-              ? user.displayName ?? 'FlixQuest member'
-              : name,
-          subtitle: username == null || username.isEmpty
-              ? user.email ?? 'Signed in'
-              : '@$username',
-          profileId: profileId,
-          photoUrl: data?['photoUrl']?.toString(),
-          loading: snapshot.connectionState != ConnectionState.done,
-          onSignOut: () => _confirmSignOut(context),
-        );
-      },
+    return _ProfileLayout(
+      metrics: metrics,
+      name: user.displayName ?? 'FlixQuest member',
+      subtitle: user.email ?? 'Signed in',
+      profileId: 0,
+      onSignOut: () => _confirmSignOut(context),
     );
   }
 
@@ -73,7 +54,7 @@ class TvProfileScreen extends StatelessWidget {
           onPressed: () async {
             Navigator.of(context).pop();
             await FlixQuestAuthService.signOutGoogle();
-            await FirebaseAuth.instance.signOut();
+            await FlixQuestAuthService().signOut();
             if (context.mounted) {
               await AuthNavigationService.returnToSignedOutRoot(context);
             }

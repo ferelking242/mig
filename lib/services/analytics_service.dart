@@ -1,12 +1,8 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 
-import '../constants/api_constants.dart';
-
-/// Centralized analytics service wrapping Mixpanel SDK.
+/// Centralized local no-op analytics service.
 ///
 /// Access via [SettingsProvider.analytics]. All event tracking flows through
 /// this singleton so that event names, properties, and error handling are
@@ -15,33 +11,20 @@ class AnalyticsService {
   AnalyticsService._();
 
   static AnalyticsService? _instance;
-  Mixpanel? _mixpanel;
 
-  /// Whether the SDK initialized successfully.
-  bool get isInitialized => _mixpanel != null;
+  /// Analytics is intentionally local-only in the visual build.
+  bool get isInitialized => true;
 
   // ---------------------------------------------------------------------------
   // Initialization
   // ---------------------------------------------------------------------------
 
-  /// Initializes Mixpanel and registers super properties.
+  /// Initializes the local no-op implementation.
   ///
   /// Returns the singleton [AnalyticsService]. Safe to call multiple times —
   /// subsequent calls are no-ops.
   static Future<AnalyticsService> init() async {
-    if (_instance != null && _instance!.isInitialized) return _instance!;
     _instance = AnalyticsService._();
-    try {
-      _instance!._mixpanel = await Mixpanel.init(
-        mixpanelKey,
-        optOutTrackingDefault: false,
-        trackAutomaticEvents: true,
-      );
-      _instance!._registerSuperProperties();
-    } catch (e) {
-      debugPrint('[AnalyticsService] Mixpanel init failed: $e');
-      // Gracefully degrade — all track* methods are no-ops when _mixpanel is null.
-    }
     return _instance!;
   }
 
@@ -51,25 +34,12 @@ class AnalyticsService {
     return _instance!;
   }
 
-  void _registerSuperProperties() {
-    _mixpanel?.registerSuperProperties({
-      'Platform': Platform.operatingSystem,
-      'OS Version': Platform.operatingSystemVersion,
-    });
-  }
-
   // ---------------------------------------------------------------------------
   // Core helpers
   // ---------------------------------------------------------------------------
 
   void _track(String event, [Map<String, dynamic>? properties]) {
-    final mixpanel = _mixpanel;
-    if (mixpanel == null) return;
-    unawaited(
-      mixpanel.track(event, properties: properties).catchError((Object error) {
-        debugPrint('[AnalyticsService] Failed to track $event: $error');
-      }),
-    );
+    // Deliberately disabled: tracking must not be required to render screens.
   }
 
   // ---------------------------------------------------------------------------
@@ -78,12 +48,12 @@ class AnalyticsService {
 
   /// Call after successful login or signup to tie events to a user.
   void identifyUser(String userId) {
-    _mixpanel?.identify(userId);
+    // Local-only build.
   }
 
   /// Call on sign-out to reset the distinct ID and clear super properties.
   void resetUser() {
-    _mixpanel?.reset();
+    // Local-only build.
   }
 
   // ---------------------------------------------------------------------------

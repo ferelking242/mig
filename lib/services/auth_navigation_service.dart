@@ -29,8 +29,8 @@ class AuthNavigationService {
     final rootNavigator = InAppMessagingService.navigatorKey.currentState ??
         Navigator.maybeOf(context, rootNavigator: true);
 
-    // Update the root gate synchronously instead of waiting for Firebase's
-    // platform stream, which can arrive after the auth route has been popped.
+    // Update the root gate synchronously so the auth route can be replaced
+    // without waiting for an external session stream.
     AuthSessionController.instance.setAuthenticatedUserId(userId);
 
     // Give UserState a frame to build the authenticated shell before revealing

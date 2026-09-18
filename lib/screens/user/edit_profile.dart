@@ -3,8 +3,6 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '/screens/user/delete_account.dart';
 import '/screens/user/email_change.dart';
 import '/screens/user/password_change.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -12,6 +10,7 @@ import '/provider/settings_provider.dart';
 import '../../constants/app_constants.dart';
 import '../../models/profile_image_list.dart';
 import '../../services/globle_method.dart';
+import '../../services/auth_session_controller.dart';
 import '../../ui_components/app_ui_components.dart';
 
 class ProfileEdit extends StatefulWidget {
@@ -22,8 +21,7 @@ class ProfileEdit extends StatefulWidget {
 }
 
 class _ProfileEditState extends State<ProfileEdit> {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  FirebaseFirestore firebaseInstance = FirebaseFirestore.instance;
+  LocalUser? _user;
   String? uid;
   String? userId;
   String? userEmail;
@@ -31,7 +29,6 @@ class _ProfileEditState extends State<ProfileEdit> {
   String? name;
   String? email;
   String? joinedAt;
-  Timestamp? createdAt;
   int? profileId;
   bool? userAnonymous;
   String? username;
@@ -47,36 +44,27 @@ class _ProfileEditState extends State<ProfileEdit> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   final GlobalMethods _globalMethods = GlobalMethods();
-  DocumentSnapshot? userDoc;
   final ScrollController _profileScrollController = ScrollController();
 
   void getData() async {
-    User? user = _auth.currentUser;
-    uid = user!.uid;
+    final user = AuthSessionController.instance.currentUser;
+    _user = user;
+    uid = user?.uid;
 
-    if (user.isAnonymous) {
+    if (user == null || user.isAnonymous) {
       setState(() {
         userAnonymous = true;
       });
     } else {
-      userDoc =
-          await FirebaseFirestore.instance.collection('users').doc(uid).get();
-
       setState(() {
         userAnonymous = false;
-        name = userDoc!.get('name');
+        name = user.displayName ?? 'FlixQuest member';
         email = user.email;
-        joinedAt = userDoc!.get('joinedAt');
-        month = DateFormat('MMMM')
-            .format(DateTime(0, DateTime.parse(joinedAt!).month));
-        year = DateTime.parse(joinedAt!).year;
-        isVerified = userDoc!.get('verified');
-        profileId = userDoc!.get('profileId');
-        username = userDoc!.get('username');
-        photoUrl = userDoc!.get('photoUrl')?.toString();
-        createdAt = userDoc!.get('createdAt');
-        userEmail = userDoc!.get('email');
-        userId = userDoc!.get('id');
+        profileId = 0;
+        username = (user.email ?? 'username').split('@').first;
+        photoUrl = user.photoURL;
+        userEmail = user.email;
+        userId = user.uid;
       });
 
       if (profileId != null && profileId! > 0) {
@@ -108,87 +96,22 @@ class _ProfileEditState extends State<ProfileEdit> {
           _isLoading = true;
         });
 
-        /// Check If Document Exists
-        Future<bool> checkIfDocExists(String docId) async {
-          try {
-            // Get reference to Firestore collection
-            var collectionRef =
-                FirebaseFirestore.instance.collection('usernames');
-
-            var doc = await collectionRef.doc(docId).get();
-            return doc.exists;
-          } catch (e) {
-            rethrow;
-          }
+        final current = _user;
+        if (current != null) {
+          AuthSessionController.instance.setAuthenticatedUser(
+            LocalUser(
+              uid: current.uid,
+              email: current.email,
+              displayName: _fullName.trim(),
+              photoURL: _avatarChanged ? null : current.photoURL,
+            ),
+          );
         }
-
-        if (username == _userName) {
-          await FirebaseFirestore.instance.collection('users').doc(uid).update({
-            'createdAt': createdAt,
-            'email': userEmail,
-            'id': userId,
-            'joinedAt': joinedAt,
-            'name': _fullName,
-            'profileId': profileId,
-            'photoUrl': _avatarChanged ? '' : (photoUrl ?? ''),
-            'username': username!.trim().toLowerCase(),
-            'verified': isVerified
-          }).then((value) {
-            if (mounted) {
-              Provider.of<SettingsProvider>(context, listen: false)
-                  .analytics
-                  .trackProfileUpdated();
-              Navigator.pop(context);
-            }
-          });
-        } else if (username != _userName) {
-          if (await checkIfDocExists(_userName) == true) {
-            if (mounted) {
-              GlobalMethods.showCustomScaffoldMessage(
-                  SnackBar(
-                    content: Text(
-                      tr('username_exists'),
-                      maxLines: 3,
-                      style: kTextSmallBodyStyle,
-                    ),
-                    duration: const Duration(seconds: 4),
-                  ),
-                  context);
-            }
-            setState(() {
-              username = userDoc!.get('username');
-            });
-            return;
-          }
-          await firebaseInstance
-              .collection('usernames')
-              .doc(username)
-              .get()
-              .then((value) {
-            if (value.exists) {
-              firebaseInstance
-                  .collection('usernames')
-                  .doc(_userName)
-                  .set({'uid': uid, 'uname': _userName}).then((value) {
-                firebaseInstance.collection('usernames').doc(username).delete();
-              });
-            }
-          });
-          await FirebaseFirestore.instance.collection('users').doc(uid).update({
-            'createdAt': createdAt,
-            'email': userEmail,
-            'id': userId,
-            'joinedAt': joinedAt,
-            'name': _fullName,
-            'profileId': profileId,
-            'photoUrl': _avatarChanged ? '' : (photoUrl ?? ''),
-            'username': _userName.trim().toLowerCase(),
-            'verified': isVerified
-          }).then((value) {
-            if (mounted) {
-              Navigator.pop(context);
-            }
-          });
+        if (mounted) {
+          Provider.of<SettingsProvider>(context, listen: false)
+              .analytics
+              .trackProfileUpdated();
+          Navigator.pop(context);
         }
       } catch (e) {
         if (mounted) {

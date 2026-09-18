@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -6,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../provider/settings_provider.dart';
 import '../../services/flixquest_auth_service.dart';
+import '../../services/auth_session_controller.dart';
 import '../app/tv_design.dart';
 import '../focus/tv_focusable.dart';
 import 'tv_auth_screen.dart';
@@ -37,7 +37,7 @@ class _TvLandingScreenState extends State<TvLandingScreen> {
           .trackLogin('google');
       // UserState owns the destination. Its auth stream replaces this landing
       // screen with TvHomeShell when the Google session becomes active.
-    } on FirebaseAuthException catch (error) {
+    } on LocalAuthException catch (error) {
       if (mounted) {
         _showError(_googleAuthMessage(error));
       }
@@ -66,7 +66,7 @@ class _TvLandingScreenState extends State<TvLandingScreen> {
           .trackLogin('anonymous');
       // UserState owns the destination. Its auth stream replaces this landing
       // screen with TvHomeShell when the anonymous session becomes active.
-    } on FirebaseAuthException catch (error) {
+    } on LocalAuthException catch (error) {
       if (mounted) {
         _showError(_authMessage(error));
       }
@@ -91,7 +91,7 @@ class _TvLandingScreenState extends State<TvLandingScreen> {
     );
   }
 
-  String _googleAuthMessage(FirebaseAuthException error) {
+  String _googleAuthMessage(LocalAuthException error) {
     return switch (error.code) {
       'account-exists-with-different-credential' =>
         'That email is already used by an email-and-password account. '
@@ -125,7 +125,7 @@ class _TvLandingScreenState extends State<TvLandingScreen> {
         'Google account is set up, or sign in with your email and password.';
   }
 
-  String _authMessage(FirebaseAuthException error) {
+  String _authMessage(LocalAuthException error) {
     return switch (error.code) {
       'operation-not-allowed' => 'Guest access is currently unavailable.',
       'network-request-failed' => 'Check your internet connection and retry.',

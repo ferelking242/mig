@@ -1,11 +1,10 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../constants/app_constants.dart';
 import '../../services/globle_method.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../ui_components/app_ui_components.dart';
+import '../../services/auth_session_controller.dart';
 
 class EmailChangeScreen extends StatefulWidget {
   const EmailChangeScreen({super.key});
@@ -17,15 +16,13 @@ class EmailChangeScreen extends StatefulWidget {
 class EmailChangeScreenState extends State<EmailChangeScreen> {
   String currentEmail = '';
   String newEmail = '';
-  User? user;
+  LocalUser? user;
   final _formKey = GlobalKey<FormState>();
-  final FirebaseAuth _auth = FirebaseAuth.instance;
   final GlobalMethods _globalMethods = GlobalMethods();
   bool _isLoading = false;
   final FocusNode _newEmailFocusNode = FocusNode();
   final FocusNode _emailVerifyFocusNode = FocusNode();
-  Timestamp? createdAt;
-  DocumentSnapshot? userDoc;
+  Object? userDoc;
   String? uid;
   String? userId;
   String? userEmail;
@@ -47,24 +44,17 @@ class EmailChangeScreenState extends State<EmailChangeScreen> {
   }
 
   void getUserData() async {
-    User? user = _auth.currentUser;
-    uid = user!.uid;
-    userDoc =
-        await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final user = AuthSessionController.instance.currentUser;
+    this.user = user;
+    uid = user?.uid;
 
     setState(() {
-      name = userDoc!.get('name');
-      email = userDoc!.get('email');
-      joinedAt = userDoc!.get('joinedAt');
-      month = DateFormat('MMMM')
-          .format(DateTime(0, DateTime.parse(joinedAt!).month));
-      year = DateTime.parse(joinedAt!).year;
-      isVerified = userDoc!.get('verified');
-      profileId = userDoc!.get('profileId');
-      username = userDoc!.get('username');
-      createdAt = userDoc!.get('createdAt');
-      userEmail = userDoc!.get('email');
-      userId = userDoc!.get('id');
+      name = user?.displayName ?? 'FlixQuest member';
+      email = user?.email;
+      username = (user?.email ?? 'username').split('@').first;
+      userEmail = user?.email;
+      userId = user?.uid;
+      userDoc = user ?? const Object();
     });
   }
 
@@ -77,35 +67,32 @@ class EmailChangeScreenState extends State<EmailChangeScreen> {
       });
       _formKey.currentState!.save();
       try {
-        user = _auth.currentUser;
-
-        await user!.verifyBeforeUpdateEmail(newEmail).then((value) async {
-          await FirebaseFirestore.instance.collection('users').doc(uid).update({
-            'createdAt': createdAt,
-            'email': newEmail,
-            'id': userId,
-            'joinedAt': joinedAt,
-            'name': name,
-            'profileId': profileId,
-            'username': username!.trim().toLowerCase(),
-            'verified': isVerified
-          }).then((value) {
-            if (!context.mounted) {
-              return;
-            }
-            GlobalMethods.showCustomScaffoldMessage(
-                SnackBar(
-                  content: Text(
-                    tr('email_successful'),
-                    maxLines: 3,
-                    style: kTextSmallBodyStyle,
-                  ),
-                  duration: const Duration(seconds: 4),
-                ),
-                context.mounted ? context : null);
-          });
-        });
-      } on FirebaseAuthException catch (e) {
+        final current = user;
+        if (current != null) {
+          AuthSessionController.instance.setAuthenticatedUser(
+            LocalUser(
+              uid: current.uid,
+              email: newEmail.trim(),
+              displayName: current.displayName,
+              photoURL: current.photoURL,
+              isAnonymous: current.isAnonymous,
+            ),
+          );
+        }
+        if (mounted) {
+          GlobalMethods.showCustomScaffoldMessage(
+            SnackBar(
+              content: Text(
+                tr('email_successful'),
+                maxLines: 3,
+                style: kTextSmallBodyStyle,
+              ),
+              duration: const Duration(seconds: 4),
+            ),
+            context,
+          );
+        }
+      } on LocalAuthException catch (e) {
         if (mounted) {
           if (e.code == 'user-mismatch') {
             _globalMethods.authErrorHandle(tr('user_mismatch'), context);

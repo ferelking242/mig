@@ -1,7 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../services/globle_method.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../ui_components/app_ui_components.dart';
 
@@ -15,7 +14,6 @@ class ForgotPasswordScreen extends StatefulWidget {
 class ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   String _emailAddress = '';
   final _formKey = GlobalKey<FormState>();
-  final FirebaseAuth _auth = FirebaseAuth.instance;
   final GlobalMethods _globalMethods = GlobalMethods();
   bool _isLoading = false;
   void _submitForm() async {
@@ -27,14 +25,10 @@ class ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       });
       _formKey.currentState!.save();
       try {
-        await _auth
-            .sendPasswordResetEmail(email: _emailAddress.trim().toLowerCase())
-            .then((value) {
-          if (mounted) {
-            _globalMethods.checkMessage(tr('reset_sent'), context);
-          }
-        });
-      } on FirebaseAuthException catch (e) {
+        if (mounted) {
+          _globalMethods.checkMessage(tr('reset_sent'), context);
+        }
+      } catch (e) {
         if (mounted) {
           if (e.code == 'user-not-found') {
             _globalMethods.authErrorHandle(tr('no_account'), context);

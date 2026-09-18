@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'dart:math';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../controllers/wellness_database_controller.dart';
 import '../models/wellness.dart';
 import '../models/wellness_insights.dart';
+import '../services/auth_session_controller.dart';
 import '../services/wellness_sync_service.dart';
 
 class WellnessProvider extends ChangeNotifier {
@@ -20,7 +20,6 @@ class WellnessProvider extends ChangeNotifier {
   final WellnessDatabaseController _database =
       WellnessDatabaseController.instance;
   late final WellnessSyncService _syncService;
-  StreamSubscription<User?>? _authSubscription;
   Timer? _syncDebounce;
   List<WellnessViewingSession> _sessions = const <WellnessViewingSession>[];
   WellnessRange _range = WellnessRange.week;
@@ -50,23 +49,14 @@ class WellnessProvider extends ChangeNotifier {
         period: WellnessPeriod.forRange(_range, DateTime.now()).previous(),
       );
 
-  Future<void> initialize({bool firebaseAvailable = true}) async {
+  Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
     _deviceId = prefs.getString(_deviceIdKey) ?? _newDeviceId();
     await prefs.setString(_deviceIdKey, _deviceId);
-    _syncService = firebaseAvailable
-        ? WellnessSyncService(database: _database)
-        : WellnessSyncService.local(database: _database);
+    _syncService = WellnessSyncService.local(database: _database);
     _syncService.status.addListener(notifyListeners);
     _syncService.lastSynced.addListener(notifyListeners);
-    if (firebaseAvailable) {
-      await _applyUser(FirebaseAuth.instance.currentUser, sync: false);
-      _authSubscription = FirebaseAuth.instance.authStateChanges().listen(
-            (user) => unawaited(_applyUser(user)),
-          );
-    } else {
-      await _applyUser(null, sync: false);
-    }
+    await _applyUser(null, sync: false);
     if (canSync) unawaited(syncNow());
   }
 
@@ -78,7 +68,7 @@ class WellnessProvider extends ChangeNotifier {
     return '${DateTime.now().microsecondsSinceEpoch}-$entropy';
   }
 
-  Future<void> _applyUser(User? user, {bool sync = true}) async {
+  Future<void> _applyUser(LocalUser? user, {bool sync = true}) async {
     final registered = user != null && !user.isAnonymous;
     _ownerId = registered ? 'user:${user.uid}' : guestOwnerId;
     _guestMergeDismissed = false;
@@ -236,7 +226,6 @@ class WellnessProvider extends ChangeNotifier {
   @override
   void dispose() {
     _syncDebounce?.cancel();
-    _authSubscription?.cancel();
     _syncService.status.removeListener(notifyListeners);
     _syncService.lastSynced.removeListener(notifyListeners);
     super.dispose();

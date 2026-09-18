@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -6,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../provider/settings_provider.dart';
 import '../../services/flixquest_auth_service.dart';
 import '../../services/auth_navigation_service.dart';
+import '../../services/auth_session_controller.dart';
 import '../../services/bookmark_sync_service.dart';
 import '../app/tv_design.dart';
 import '../focus/tv_focusable.dart';
@@ -69,7 +69,7 @@ class _TvAuthScreenState extends State<TvAuthScreen> {
       _error = null;
     });
     try {
-      late final UserCredential credential;
+      late final LocalUserCredential credential;
       if (_isSignIn) {
         credential = await _authService.signIn(
           email: _emailController.text,
@@ -97,7 +97,7 @@ class _TvAuthScreenState extends State<TvAuthScreen> {
           authenticatedUserId: credential.user!.uid,
         );
       }
-    } on FirebaseAuthException catch (error) {
+    } on LocalAuthException catch (error) {
       if (mounted) setState(() => _error = _authMessage(error));
     } catch (_) {
       if (mounted) {
@@ -108,7 +108,7 @@ class _TvAuthScreenState extends State<TvAuthScreen> {
     }
   }
 
-  String _authMessage(FirebaseAuthException error) {
+  String _authMessage(LocalAuthException error) {
     return switch (error.code) {
       'invalid-credential' ||
       'wrong-password' =>
@@ -124,7 +124,7 @@ class _TvAuthScreenState extends State<TvAuthScreen> {
     };
   }
 
-  String _googleAuthMessage(FirebaseAuthException error) {
+  String _googleAuthMessage(LocalAuthException error) {
     return switch (error.code) {
       'account-exists-with-different-credential' =>
         'That email is already used by an email-and-password account. '
@@ -178,7 +178,7 @@ class _TvAuthScreenState extends State<TvAuthScreen> {
           authenticatedUserId: credential.user!.uid,
         );
       }
-    } on FirebaseAuthException catch (error) {
+    } on LocalAuthException catch (error) {
       if (mounted) setState(() => _error = _googleAuthMessage(error));
     } on PlatformException catch (error) {
       if (mounted && !_isGoogleSignInCancel(error)) {

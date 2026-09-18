@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../constants/app_constants.dart';
@@ -7,12 +6,12 @@ import '../../services/auth_navigation_service.dart';
 import '../../services/flixquest_auth_service.dart';
 import '../../services/in_app_messaging_service.dart';
 import '../../services/recently_watched_sync_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '/provider/settings_provider.dart';
 import '../../provider/wellness_provider.dart';
 import '../../ui_components/app_ui_components.dart';
+import '../../services/auth_session_controller.dart';
 
 class DeleteAccountScreen extends StatefulWidget {
   const DeleteAccountScreen({super.key});
@@ -23,12 +22,11 @@ class DeleteAccountScreen extends StatefulWidget {
 
 class DeleteAccountScreenState extends State<DeleteAccountScreen> {
   String confirmationText = '';
-  User? user;
+  LocalUser? user;
   final _formKey = GlobalKey<FormState>();
-  final FirebaseAuth _auth = FirebaseAuth.instance;
   final GlobalMethods _globalMethods = GlobalMethods();
   bool _isLoading = false;
-  DocumentSnapshot? userDoc;
+  Object? userDoc;
   String? uid;
   String? username;
   final FocusNode deleteFN = FocusNode();
@@ -40,14 +38,10 @@ class DeleteAccountScreenState extends State<DeleteAccountScreen> {
   }
 
   void getUserData() async {
-    User? user = _auth.currentUser;
-    uid = user!.uid;
-    userDoc =
-        await FirebaseFirestore.instance.collection('users').doc(uid).get();
-
-    setState(() {
-      username = userDoc!.get('username');
-    });
+    user = AuthSessionController.instance.currentUser;
+    uid = user?.uid;
+    username = (user?.email ?? 'username').split('@').first;
+    if (mounted) setState(() => userDoc = user ?? const Object());
   }
 
   void _submitForm() async {
@@ -59,65 +53,33 @@ class DeleteAccountScreenState extends State<DeleteAccountScreen> {
       });
       _formKey.currentState!.save();
       try {
-        user = _auth.currentUser;
-
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .delete()
-            .then((value) async {
-          await FirebaseFirestore.instance
-              .collection('bookmarks')
-              .doc(uid)
-              .delete()
-              .then((value) async {
-            await WellnessProvider.instance.deleteAccountData(uid!);
-            await RecentlyWatchedSyncService.instance.deleteAccountData(uid!);
-            await FirebaseFirestore.instance
-                .collection('bookmarks-v2.0')
-                .doc(uid)
-                .delete()
-                .then((value) async {
-              await FirebaseFirestore.instance
-                  .collection('usernames')
-                  .doc(username)
-                  .delete()
-                  .then((value) async {
-                await user!.delete().then((value) async {
-                  await FlixQuestAuthService.signOutGoogle();
-                  if (!context.mounted) {
-                    return;
-                  }
-                  if (mounted) {
-                    Provider.of<SettingsProvider>(context, listen: false)
-                        .analytics
-                        .trackAccountDeleted();
-                    Provider.of<SettingsProvider>(context, listen: false)
-                        .analytics
-                        .resetUser();
-                    await AuthNavigationService.returnToSignedOutRoot(context);
-                    final rootContext =
-                        InAppMessagingService.navigatorKey.currentContext;
-                    if (rootContext != null && rootContext.mounted) {
-                      GlobalMethods.showCustomScaffoldMessage(
-                        SnackBar(
-                          content: Text(
-                            tr('account_deleted_successfully'),
-                            maxLines: 3,
-                            style: kTextSmallBodyStyle,
-                          ),
-                          duration: const Duration(seconds: 4),
-                        ),
-                        rootContext,
-                      );
-                    }
-                  }
-                });
-              });
-            });
-          });
-        });
-      } on FirebaseAuthException catch (e) {
+        await WellnessProvider.instance.deleteAccountData(uid ?? '');
+        await RecentlyWatchedSyncService.instance.deleteAccountData(uid ?? '');
+        await FlixQuestAuthService.signOutGoogle();
+        await FlixQuestAuthService().deleteCurrentUser();
+        if (!context.mounted) return;
+        Provider.of<SettingsProvider>(context, listen: false)
+            .analytics
+            .trackAccountDeleted();
+        Provider.of<SettingsProvider>(context, listen: false)
+            .analytics
+            .resetUser();
+        await AuthNavigationService.returnToSignedOutRoot(context);
+        final rootContext = InAppMessagingService.navigatorKey.currentContext;
+        if (rootContext != null && rootContext.mounted) {
+          GlobalMethods.showCustomScaffoldMessage(
+            SnackBar(
+              content: Text(
+                tr('account_deleted_successfully'),
+                maxLines: 3,
+                style: kTextSmallBodyStyle,
+              ),
+              duration: const Duration(seconds: 4),
+            ),
+            rootContext,
+          );
+        }
+      } on LocalAuthException catch (e) {
         if (mounted) {
           if (e.code == 'user-mismatch') {
             _globalMethods.authErrorHandle(tr('user_mismatch'), context);

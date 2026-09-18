@@ -4,7 +4,6 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '/constants/app_constants.dart';
 import '/models/profile_image_list.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -12,6 +11,7 @@ import '../../provider/settings_provider.dart';
 import '../../services/globle_method.dart';
 import '../../services/flixquest_auth_service.dart';
 import '../../services/auth_navigation_service.dart';
+import '../../services/auth_session_controller.dart';
 import '../../services/bookmark_sync_service.dart';
 import '../../ui_components/app_ui_components.dart';
 import '../../widgets/app_logo.dart';
@@ -96,7 +96,7 @@ class _SignupScreenState extends State<SignupScreen> {
         context,
         authenticatedUserId: credential.user!.uid,
       );
-    } on FirebaseAuthException catch (error) {
+    } on LocalAuthException catch (error) {
       if (!mounted) return;
       if (error.code == 'weak-password') {
         _globalMethods.authErrorHandle(tr('weak_password'), context);

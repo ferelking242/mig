@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:provider/provider.dart';
@@ -16,6 +14,7 @@ import '../../models/tv.dart';
 import '../../provider/app_dependency_provider.dart';
 import '../../provider/settings_provider.dart';
 import '../../services/bookmark_sync_service.dart';
+import '../../services/auth_session_controller.dart';
 import '../../services/globle_method.dart';
 import '../../services/recently_watched_sync_service.dart';
 import '../../ui_components/app_ui_components.dart';
@@ -33,8 +32,6 @@ class SyncScreen extends StatefulWidget {
 
 class _SyncScreenState extends State<SyncScreen>
     with SingleTickerProviderStateMixin {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final MovieDatabaseController _movieDb = MovieDatabaseController();
   final TVDatabaseController _tvDb = TVDatabaseController();
 
@@ -75,65 +72,17 @@ class _SyncScreenState extends State<SyncScreen>
   }
 
   Future<void> _fetchData() async {
-    final user = _auth.currentUser;
-    if (user == null || user.isAnonymous) {
-      if (mounted) {
-        setState(() {
-          _cloudMovies = [];
-          _cloudTvShows = [];
-          _isLoading = false;
-        });
-      }
-      return;
-    }
-
     setState(() => _isLoading = true);
-
-    try {
-      final docRef = _firestore.collection('bookmarks-v2.0').doc(user.uid);
-      final docSnapshot = await docRef.get();
-
-      if (!docSnapshot.exists) {
-        await docRef.set({
-          'movies': <Map<String, dynamic>>[],
-          'tvShows': <Map<String, dynamic>>[],
-        });
-      }
-
-      final docData = docSnapshot.data() ?? {};
-      final rawMovies = List.from(docData['movies'] ?? []);
-      final rawTvs = List.from(docData['tvShows'] ?? []);
-
-      final loadedMovies = <Movie>[];
-      for (final item in rawMovies) {
-        if (item is Map<String, dynamic>) {
-          loadedMovies.add(Movie.fromJson(item));
-        }
-      }
-
-      final loadedTvs = <TV>[];
-      for (final item in rawTvs) {
-        if (item is Map<String, dynamic>) {
-          loadedTvs.add(TV.fromJson(item));
-        }
-      }
-
-      final localMovieCount = await _movieDb.getCount();
-      final localTvCount = await _tvDb.getCount();
-
-      if (mounted) {
-        setState(() {
-          _cloudMovies = loadedMovies;
-          _cloudTvShows = loadedTvs;
-          _localMovieCount = localMovieCount;
-          _localTvCount = localTvCount;
-          _isLoading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+    final localMovieCount = await _movieDb.getCount();
+    final localTvCount = await _tvDb.getCount();
+    if (mounted) {
+      setState(() {
+        _cloudMovies = [];
+        _cloudTvShows = [];
+        _localMovieCount = localMovieCount;
+        _localTvCount = localTvCount;
+        _isLoading = false;
+      });
     }
   }
 
@@ -290,7 +239,7 @@ class _SyncScreenState extends State<SyncScreen>
 
   @override
   Widget build(BuildContext context) {
-    final user = _auth.currentUser;
+    final user = AuthSessionController.instance.currentUser;
     final isSignedIn = user != null && !user.isAnonymous;
 
     return Scaffold(
@@ -389,7 +338,7 @@ class _SyncScreenState extends State<SyncScreen>
   Widget _buildAutoSyncBanner(
     BuildContext context,
     bool isSignedIn,
-    User? user,
+    LocalUser? user,
   ) {
     final colors = Theme.of(context).colorScheme;
 

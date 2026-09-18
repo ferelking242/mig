@@ -1,5 +1,4 @@
 import 'package:easy_localization/easy_localization.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../functions/function.dart';
 import '../../provider/settings_provider.dart';
 import '../../services/globle_method.dart';
+import '../../services/auth_session_controller.dart';
 import '../../services/flixquest_auth_service.dart';
 import '../../widgets/google_sign_in_button.dart';
 import '../user/login_screen.dart';
@@ -158,7 +158,7 @@ class _LandingScreenState extends State<LandingScreen> {
       if (credential == null) return;
       settings.analytics.trackLogin('google');
       // UserState's auth stream swaps this landing screen for the app shell.
-    } on FirebaseAuthException catch (error) {
+    } on LocalAuthException catch (error) {
       if (mounted) _showError(_googleAuthMessage(error));
     } on PlatformException catch (error) {
       if (mounted && !_isGoogleSignInCancel(error)) {
@@ -171,7 +171,7 @@ class _LandingScreenState extends State<LandingScreen> {
     }
   }
 
-  String _googleAuthMessage(FirebaseAuthException error) {
+  String _googleAuthMessage(LocalAuthException error) {
     return switch (error.code) {
       'account-exists-with-different-credential' =>
         tr('google_email_conflict'),

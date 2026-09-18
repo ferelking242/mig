@@ -7,9 +7,8 @@ String? _remoteTmdbApiKey;
 
 /// The TMDB API key used across all metadata and search endpoints.
 ///
-/// Initially falls back to `dotenv.env['TMDB_API_KEY']` (from the local `.env`).
-/// If a non-empty key is fetched from Firebase Remote Config (`tmdb_api_key`),
-/// it overrides this value at runtime.
+/// Initially falls back to `dotenv.env['TMDB_API_KEY']` when a local `.env`
+/// is available. Rendering does not depend on remote configuration.
 String get TMDB_API_KEY =>
     _remoteTmdbApiKey ?? dotenv.env['TMDB_API_KEY'] ?? '';
 
@@ -17,7 +16,6 @@ set TMDB_API_KEY(String value) {
   final trimmed = value.trim();
   _remoteTmdbApiKey = trimmed.isNotEmpty ? trimmed : null;
 }
-String mixpanelKey = dotenv.env['MIXPANEL_API_KEY']!;
 const TMDB_BASE_IMAGE_URL = 'https://image.tmdb.org/t/p/';
 const String EMBED_BASE_MOVIE_URL =
     'https://www.2embed.to/embed/tmdb/movie?id=';
@@ -29,4 +27,4 @@ const String INSTAGRAM_BASE_URL = 'https://instagram.com/';
 const String TWITTER_BASE_URL = 'https://twitter.com/';
 const String IMDB_BASE_URL = 'https://imdb.com/title/';
 const String TWOEMBED_BASE_URL = 'https://2embed.biz';
-String flixquestApiUrl = dotenv.env['FLIXQUEST_API_URL']!;
+String flixquestApiUrl = dotenv.env['FLIXQUEST_API_URL'] ?? '';

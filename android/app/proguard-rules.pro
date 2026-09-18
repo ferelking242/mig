@@ -5,7 +5,6 @@
 -keep class io.flutter.view.** { *; }
 -keep class io.flutter.** { *; }
 -keep class io.flutter.plugins.** { *; }
--keep class com.google.firebase.** { *; }
 -dontwarn io.flutter.embedding.**
 
 # The download bridge is called from Flutter/Android framework entry points,

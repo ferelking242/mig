@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
-import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:flixquest/models/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -30,7 +29,6 @@ import 'services/deep_link_dispatcher.dart';
 import 'services/home_widget_service.dart';
 import 'services/recently_watched_sync_service.dart';
 import 'services/app_session_state_store.dart';
-import 'services/app_remote_config.dart';
 import 'screens/common/downloads_screen.dart';
 import 'tv/platform/device_presentation.dart';
 import 'tv/widgets/tv_update_gate.dart';
@@ -42,7 +40,6 @@ class FlixQuest extends StatefulWidget {
       required this.bookmarkProvider,
       required this.appDependencyProvider,
       required this.devicePresentation,
-      this.firebaseAvailable = true,
       super.key});
 
   final SettingsProvider settingsProvider;
@@ -50,7 +47,6 @@ class FlixQuest extends StatefulWidget {
   final BookmarkProvider bookmarkProvider;
   final AppDependencyProvider appDependencyProvider;
   final DevicePresentation devicePresentation;
-  final bool firebaseAvailable;
 
   @override
   State<FlixQuest> createState() => _FlixQuestState();
@@ -58,54 +54,7 @@ class FlixQuest extends StatefulWidget {
 
 class _FlixQuestState extends State<FlixQuest>
     with ChangeNotifier, WidgetsBindingObserver {
-  FirebaseRemoteConfig? _remoteConfig;
-  StreamSubscription<RemoteConfigUpdate>? _remoteConfigSubscription;
   Timer? _widgetRefreshDebounce;
-
-  Future<void> _initConfig() async {
-    final remoteConfig = _remoteConfig;
-    if (remoteConfig == null) return;
-    try {
-      await AppRemoteConfig.configure(remoteConfig);
-      await _fetchConfig();
-    } catch (_) {
-      // The persisted app configuration remains usable while Firebase is
-      // temporarily unavailable.
-    }
-    if (mounted) {
-      _remoteConfigSubscription = remoteConfig.onConfigUpdated.listen(
-        _onRemoteConfigUpdated,
-        onError: (_) {},
-      );
-    }
-  }
-
-  Future<void> _fetchConfig() async {
-    final remoteConfig = _remoteConfig;
-    if (remoteConfig == null) return;
-    try {
-      await remoteConfig.fetchAndActivate();
-    } catch (_) {
-      // Cached/default values still provide a safe startup when offline.
-    }
-    if (mounted) {
-      AppRemoteConfig.apply(remoteConfig, widget.appDependencyProvider);
-    }
-    await requestNotificationPermissions();
-  }
-
-  Future<void> _onRemoteConfigUpdated(RemoteConfigUpdate update) async {
-    final remoteConfig = _remoteConfig;
-    if (remoteConfig == null) return;
-    try {
-      await remoteConfig.activate();
-      if (mounted) {
-        AppRemoteConfig.apply(remoteConfig, widget.appDependencyProvider);
-      }
-    } catch (_) {
-      // Keep the last successfully activated configuration.
-    }
-  }
 
   @override
   void initState() {
@@ -113,18 +62,8 @@ class _FlixQuestState extends State<FlixQuest>
     WidgetsBinding.instance.addObserver(this);
     WellnessProvider.instance.addListener(_scheduleLocalWidgetRefresh);
     widget.bookmarkProvider.addListener(_scheduleLocalWidgetRefresh);
-    if (widget.firebaseAvailable) {
-      try {
-        _remoteConfig = FirebaseRemoteConfig.instance;
-      } catch (_) {
-        _remoteConfig = null;
-      }
-      _initConfig();
-    }
     fileDelete();
-    if (widget.firebaseAvailable) {
-      InAppMessagingService.initialize();
-    }
+    InAppMessagingService.initialize();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       DeepLinkDispatcher.onAppReady();
       unawaited(_refreshHomeWidgets());
@@ -151,18 +90,12 @@ class _FlixQuestState extends State<FlixQuest>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) {
-      // Leaving the app is the last chance to hand off progress saved by the
-      // player, so push it now instead of waiting out the debounce.
-      if (widget.firebaseAvailable) {
-        unawaited(RecentlyWatchedSyncService.instance.flushPending());
-      }
+       unawaited(RecentlyWatchedSyncService.instance.flushPending());
       return;
     }
     DeepLinkDispatcher.onAppReady();
     unawaited(_refreshHomeWidgets());
-    if (widget.firebaseAvailable) {
-      unawaited(RecentlyWatchedSyncService.instance.autoSyncIfSignedIn());
-    }
+    unawaited(RecentlyWatchedSyncService.instance.autoSyncIfSignedIn());
   }
 
   @override
@@ -171,7 +104,6 @@ class _FlixQuestState extends State<FlixQuest>
     WellnessProvider.instance.removeListener(_scheduleLocalWidgetRefresh);
     widget.bookmarkProvider.removeListener(_scheduleLocalWidgetRefresh);
     _widgetRefreshDebounce?.cancel();
-    _remoteConfigSubscription?.cancel();
     super.dispose();
   }
 

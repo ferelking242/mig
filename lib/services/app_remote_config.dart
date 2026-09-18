@@ -1,10 +1,6 @@
 import 'dart:convert';
 
-import 'package:firebase_remote_config/firebase_remote_config.dart';
-
-import '../constants/api_constants.dart';
 import '../models/banner_ad.dart';
-import '../provider/app_dependency_provider.dart';
 
 class AppRemoteConfig {
   const AppRemoteConfig._();
@@ -26,40 +22,6 @@ class AppRemoteConfig {
 
   /// Live TV used to ride on the OTT flag before it got a dedicated key.
   static const legacyEnableLiveTvKey = 'enable_ott';
-
-  static Future<void> configure(FirebaseRemoteConfig remoteConfig) async {
-    await remoteConfig.setConfigSettings(
-      RemoteConfigSettings(
-        fetchTimeout: const Duration(minutes: 1),
-        minimumFetchInterval: const Duration(minutes: 1),
-      ),
-    );
-    await remoteConfig.setDefaults(const <String, Object>{
-      occasionalThemeKey: '{"enabled":false}',
-      appLogoKey: '',
-      legacyAppLogoKey: 'default',
-      'forced_update': false,
-      'latest_version': '',
-      'latest_build_number': 0,
-      'min_build_number': 0,
-      'app_download_url': '',
-      'change_log': '',
-      flixquestApiInstancesKey: '',
-      flixquestApiUrlKey: '',
-      tmdbApiKey: '',
-      // Feature toggles ship enabled so a failed or offline fetch never hides
-      // playback, downloads or Live TV.
-      enableWatchNowKey: true,
-      enableDownloadKey: true,
-      enableLiveTvKey: true,
-      legacyEnableLiveTvKey: true,
-      bannersKey: '{"banners":[]}',
-      bannerAdNetworkKey: 'native',
-      unityGameIdAndroidKey: '5445375',
-      unityBannerPlacementIdKey: 'Banner_Android',
-      unityTestModeKey: false,
-    });
-  }
 
   static List<String> parseApiInstances(String rawJson) {
     final trimmed = rawJson.trim();
@@ -83,71 +45,6 @@ class AppRemoteConfig {
       // Malformed JSON falls back gracefully.
     }
     return const [];
-  }
-
-  static void apply(
-    FirebaseRemoteConfig remoteConfig,
-    AppDependencyProvider provider,
-  ) {
-    final preferredLogoValue = remoteConfig.getValue(appLogoKey);
-    final legacyLogoValue = remoteConfig.getValue(legacyAppLogoKey);
-    final preferredLogo = preferredLogoValue.asString().trim();
-    final legacyLogo = legacyLogoValue.asString().trim();
-    if (preferredLogoValue.source == ValueSource.valueRemote &&
-        preferredLogo.isNotEmpty) {
-      provider.flixQuestLogo = preferredLogo;
-    } else if (legacyLogoValue.source == ValueSource.valueRemote) {
-      provider.flixQuestLogo = legacyLogo;
-    } else if (preferredLogoValue.source == ValueSource.valueRemote) {
-      provider.flixQuestLogo = 'default';
-    }
-
-    final occasionalThemeValue = remoteConfig.getValue(occasionalThemeKey);
-    if (occasionalThemeValue.source == ValueSource.valueRemote) {
-      provider.applyRemoteOccasionalTheme(occasionalThemeValue.asString());
-    }
-    provider.displayWatchNowButton = remoteConfig.getBool(enableWatchNowKey);
-    provider.displayDownloadButton = remoteConfig.getBool(enableDownloadKey);
-    provider.displayLiveTV = _resolveLiveTv(remoteConfig);
-    provider.setBannerConfigs(
-        parseBannerConfigs(remoteConfig.getString(bannersKey)));
-
-    final bannerNetwork = remoteConfig.getString(bannerAdNetworkKey).trim();
-    provider.setBannerAdNetwork(
-      bannerNetwork.isNotEmpty ? bannerNetwork : 'native',
-    );
-
-    final unityGameId = remoteConfig.getString(unityGameIdAndroidKey).trim();
-    final unityPlacement =
-        remoteConfig.getString(unityBannerPlacementIdKey).trim();
-    final unityTestMode = remoteConfig.getBool(unityTestModeKey);
-    provider.setUnityAdsConfig(
-      gameIdAndroid: unityGameId.isNotEmpty ? unityGameId : null,
-      bannerPlacementId: unityPlacement.isNotEmpty ? unityPlacement : null,
-      testMode: unityTestMode,
-    );
-
-    final instancesRaw = remoteConfig.getString(flixquestApiInstancesKey);
-    final parsedInstances = parseApiInstances(instancesRaw);
-    final legacyUrl = remoteConfig.getString(flixquestApiUrlKey).trim();
-    provider.setFlixquestApiConfig(
-      instances: parsedInstances,
-      url: legacyUrl.isNotEmpty ? legacyUrl : null,
-    );
-
-    provider.setUpdateConfiguration(
-      forced: remoteConfig.getBool('forced_update'),
-      latestVersion: remoteConfig.getString('latest_version'),
-      latestBuild: remoteConfig.getInt('latest_build_number'),
-      minimumBuild: remoteConfig.getInt('min_build_number'),
-      downloadUrl: remoteConfig.getString('app_download_url'),
-      changeLog: remoteConfig.getString('change_log'),
-    );
-    provider.tmdbProxy = remoteConfig.getString('tmdb_proxy');
-    final remoteTmdbKey = remoteConfig.getString(tmdbApiKey).trim();
-    if (remoteTmdbKey.isNotEmpty) {
-      TMDB_API_KEY = remoteTmdbKey;
-    }
   }
 
   static Map<String, BannerDisplayConfig> parseBannerConfigs(String rawJson) {
@@ -185,14 +82,4 @@ class AppRemoteConfig {
     }
   }
 
-  /// Resolves the Live TV toggle, preferring [enableLiveTvKey] and falling back
-  /// to [legacyEnableLiveTvKey] for consoles that have not migrated yet. Only
-  /// values actually published remotely win; otherwise the feature stays on.
-  static bool _resolveLiveTv(FirebaseRemoteConfig remoteConfig) {
-    final value = remoteConfig.getValue(enableLiveTvKey);
-    if (value.source == ValueSource.valueRemote) return value.asBool();
-    final legacy = remoteConfig.getValue(legacyEnableLiveTvKey);
-    if (legacy.source == ValueSource.valueRemote) return legacy.asBool();
-    return true;
-  }
 }

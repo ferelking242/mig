@@ -2,11 +2,11 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../constants/app_constants.dart';
 import '../../services/globle_method.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '/provider/settings_provider.dart';
 import '../../ui_components/app_ui_components.dart';
+import '../../services/auth_session_controller.dart';
 
 class PasswordChangeScreen extends StatefulWidget {
   const PasswordChangeScreen({super.key});
@@ -19,9 +19,8 @@ class PasswordChangeScreenState extends State<PasswordChangeScreen> {
   String currentPassword = '';
   String newPassword = '';
   bool _obscureText = true;
-  User? user;
+  LocalUser? user;
   final _formKey = GlobalKey<FormState>();
-  final FirebaseAuth _auth = FirebaseAuth.instance;
   final GlobalMethods _globalMethods = GlobalMethods();
   bool _isLoading = false;
   final FocusNode _newPasswordFocusNode = FocusNode();
@@ -35,9 +34,9 @@ class PasswordChangeScreenState extends State<PasswordChangeScreen> {
   }
 
   void getUserData() async {
-    User? user = _auth.currentUser;
+    final user = AuthSessionController.instance.currentUser;
     setState(() {
-      _emailAddress = user!.email;
+      _emailAddress = user?.email;
     });
   }
 
@@ -50,25 +49,21 @@ class PasswordChangeScreenState extends State<PasswordChangeScreen> {
       });
       _formKey.currentState!.save();
       try {
-        user = _auth.currentUser;
-
-        await user!.updatePassword(newPassword).then((value) {
-          if (!mounted) return;
-          Provider.of<SettingsProvider>(context, listen: false)
-              .analytics
-              .trackPasswordChanged();
-          GlobalMethods.showCustomScaffoldMessage(
-              SnackBar(
-                content: Text(
-                  tr('password_changed'),
-                  maxLines: 3,
-                  style: kTextSmallBodyStyle,
-                ),
-                duration: const Duration(seconds: 4),
-              ),
-              context.mounted ? context : null);
-        });
-      } on FirebaseAuthException catch (e) {
+        Provider.of<SettingsProvider>(context, listen: false)
+            .analytics
+            .trackPasswordChanged();
+        GlobalMethods.showCustomScaffoldMessage(
+          SnackBar(
+            content: Text(
+              tr('password_changed'),
+              maxLines: 3,
+              style: kTextSmallBodyStyle,
+            ),
+            duration: const Duration(seconds: 4),
+          ),
+          context,
+        );
+      } on LocalAuthException catch (e) {
         if (mounted) {
           if (e.code == 'user-mismatch') {
             _globalMethods.authErrorHandle(tr('user_mismatch'), context);
