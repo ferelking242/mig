@@ -20,7 +20,15 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/screens/
+    - assets/screens/movies-home.jpg
+    - assets/screens/series-detail.jpg
+    - assets/screens/episodes.jpg
+    - assets/screens/movie-detail.jpg
+    - assets/screens/season-detail.jpg
+    - assets/screens/episode-detail.jpg
+    - assets/screens/live-tv.jpg
+    - assets/screens/downloads.jpg
+    - assets/screens/player.jpg
   fonts:
     - family: Figtree
       fonts:
