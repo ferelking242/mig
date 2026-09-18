@@ -1,1 +1,2 @@
 - [Android resource cleanup](android-resource-cleanup.md) — remove qualifier-only resources together with deleted native features so release lint stays green.
+- [CI Flutter version](ci-flutter-version.md) — use Flutter with Dart 3.9+ because the video-player dependency rejects Dart 3.8.
