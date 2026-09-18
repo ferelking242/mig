@@ -1,4 +1,4 @@
-name: Build MIG ARM64
+name: Build MIG Screens ARM64
 
 on:
   workflow_dispatch:
@@ -10,7 +10,6 @@ on:
       - "assets/**"
       - "lib/**"
       - "pubspec.yaml"
-      - "pubspec.lock"
       - ".github/workflows/build-mig-arm64.yml"
 
 concurrency:
@@ -22,7 +21,7 @@ permissions:
 
 jobs:
   build:
-    name: Build MIG Android ARM64 APK
+    name: Build MIG Screens Android ARM64 APK
     runs-on: ubuntu-latest
     timeout-minutes: 35
 
@@ -43,9 +42,6 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Prepare environment
-        run: printf '' > .env
-
       - name: Install dependencies
         run: flutter pub get
 
@@ -55,7 +51,7 @@ jobs:
             --release \
             --target-platform android-arm64 \
             --tree-shake-icons \
-            --split-debug-info=build/mig-symbols
+            --split-debug-info=build/mig-screens-symbols
 
       - name: Verify ARM64 APK
         run: |
@@ -71,7 +67,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MIG-arm64-release
+          name: MIG-screens-arm64-release
           path: build/app/outputs/flutter-apk/app-release.apk
           compression-level: 0
           retention-days: 30
@@ -79,7 +75,7 @@ jobs:
       - name: Upload Dart symbols
         uses: actions/upload-artifact@v4
         with:
-          name: MIG-arm64-symbols
-          path: build/mig-symbols
+          name: MIG-screens-arm64-symbols
+          path: build/mig-screens-symbols
           if-no-files-found: ignore
           retention-days: 30
