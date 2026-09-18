@@ -50,17 +50,23 @@ class WellnessProvider extends ChangeNotifier {
         period: WellnessPeriod.forRange(_range, DateTime.now()).previous(),
       );
 
-  Future<void> initialize() async {
+  Future<void> initialize({bool firebaseAvailable = true}) async {
     final prefs = await SharedPreferences.getInstance();
     _deviceId = prefs.getString(_deviceIdKey) ?? _newDeviceId();
     await prefs.setString(_deviceIdKey, _deviceId);
-    _syncService = WellnessSyncService(database: _database);
+    _syncService = firebaseAvailable
+        ? WellnessSyncService(database: _database)
+        : WellnessSyncService.local(database: _database);
     _syncService.status.addListener(notifyListeners);
     _syncService.lastSynced.addListener(notifyListeners);
-    await _applyUser(FirebaseAuth.instance.currentUser, sync: false);
-    _authSubscription = FirebaseAuth.instance.authStateChanges().listen(
-          (user) => unawaited(_applyUser(user)),
-        );
+    if (firebaseAvailable) {
+      await _applyUser(FirebaseAuth.instance.currentUser, sync: false);
+      _authSubscription = FirebaseAuth.instance.authStateChanges().listen(
+            (user) => unawaited(_applyUser(user)),
+          );
+    } else {
+      await _applyUser(null, sync: false);
+    }
     if (canSync) unawaited(syncNow());
   }
 

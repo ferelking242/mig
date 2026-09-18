@@ -42,6 +42,7 @@ class FlixQuest extends StatefulWidget {
       required this.bookmarkProvider,
       required this.appDependencyProvider,
       required this.devicePresentation,
+      this.firebaseAvailable = true,
       super.key});
 
   final SettingsProvider settingsProvider;
@@ -49,6 +50,7 @@ class FlixQuest extends StatefulWidget {
   final BookmarkProvider bookmarkProvider;
   final AppDependencyProvider appDependencyProvider;
   final DevicePresentation devicePresentation;
+  final bool firebaseAvailable;
 
   @override
   State<FlixQuest> createState() => _FlixQuestState();
@@ -56,20 +58,22 @@ class FlixQuest extends StatefulWidget {
 
 class _FlixQuestState extends State<FlixQuest>
     with ChangeNotifier, WidgetsBindingObserver {
-  final FirebaseRemoteConfig _remoteConfig = FirebaseRemoteConfig.instance;
+  FirebaseRemoteConfig? _remoteConfig;
   StreamSubscription<RemoteConfigUpdate>? _remoteConfigSubscription;
   Timer? _widgetRefreshDebounce;
 
   Future<void> _initConfig() async {
+    final remoteConfig = _remoteConfig;
+    if (remoteConfig == null) return;
     try {
-      await AppRemoteConfig.configure(_remoteConfig);
+      await AppRemoteConfig.configure(remoteConfig);
       await _fetchConfig();
     } catch (_) {
       // The persisted app configuration remains usable while Firebase is
       // temporarily unavailable.
     }
     if (mounted) {
-      _remoteConfigSubscription = _remoteConfig.onConfigUpdated.listen(
+      _remoteConfigSubscription = remoteConfig.onConfigUpdated.listen(
         _onRemoteConfigUpdated,
         onError: (_) {},
       );
@@ -77,22 +81,26 @@ class _FlixQuestState extends State<FlixQuest>
   }
 
   Future<void> _fetchConfig() async {
+    final remoteConfig = _remoteConfig;
+    if (remoteConfig == null) return;
     try {
-      await _remoteConfig.fetchAndActivate();
+      await remoteConfig.fetchAndActivate();
     } catch (_) {
       // Cached/default values still provide a safe startup when offline.
     }
     if (mounted) {
-      AppRemoteConfig.apply(_remoteConfig, widget.appDependencyProvider);
+      AppRemoteConfig.apply(remoteConfig, widget.appDependencyProvider);
     }
     await requestNotificationPermissions();
   }
 
   Future<void> _onRemoteConfigUpdated(RemoteConfigUpdate update) async {
+    final remoteConfig = _remoteConfig;
+    if (remoteConfig == null) return;
     try {
-      await _remoteConfig.activate();
+      await remoteConfig.activate();
       if (mounted) {
-        AppRemoteConfig.apply(_remoteConfig, widget.appDependencyProvider);
+        AppRemoteConfig.apply(remoteConfig, widget.appDependencyProvider);
       }
     } catch (_) {
       // Keep the last successfully activated configuration.
@@ -105,9 +113,18 @@ class _FlixQuestState extends State<FlixQuest>
     WidgetsBinding.instance.addObserver(this);
     WellnessProvider.instance.addListener(_scheduleLocalWidgetRefresh);
     widget.bookmarkProvider.addListener(_scheduleLocalWidgetRefresh);
-    _initConfig();
+    if (widget.firebaseAvailable) {
+      try {
+        _remoteConfig = FirebaseRemoteConfig.instance;
+      } catch (_) {
+        _remoteConfig = null;
+      }
+      _initConfig();
+    }
     fileDelete();
-    InAppMessagingService.initialize();
+    if (widget.firebaseAvailable) {
+      InAppMessagingService.initialize();
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       DeepLinkDispatcher.onAppReady();
       unawaited(_refreshHomeWidgets());
@@ -136,12 +153,16 @@ class _FlixQuestState extends State<FlixQuest>
     if (state != AppLifecycleState.resumed) {
       // Leaving the app is the last chance to hand off progress saved by the
       // player, so push it now instead of waiting out the debounce.
-      unawaited(RecentlyWatchedSyncService.instance.flushPending());
+      if (widget.firebaseAvailable) {
+        unawaited(RecentlyWatchedSyncService.instance.flushPending());
+      }
       return;
     }
     DeepLinkDispatcher.onAppReady();
     unawaited(_refreshHomeWidgets());
-    unawaited(RecentlyWatchedSyncService.instance.autoSyncIfSignedIn());
+    if (widget.firebaseAvailable) {
+      unawaited(RecentlyWatchedSyncService.instance.autoSyncIfSignedIn());
+    }
   }
 
   @override

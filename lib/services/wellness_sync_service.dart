@@ -18,21 +18,27 @@ class WellnessSyncService {
         _auth = auth ?? FirebaseAuth.instance,
         _firestore = firestore ?? FirebaseFirestore.instance;
 
+  WellnessSyncService.local({
+    WellnessDatabaseController? database,
+  })  : _database = database ?? WellnessDatabaseController.instance,
+        _auth = null,
+        _firestore = null;
+
   final WellnessDatabaseController _database;
-  final FirebaseAuth _auth;
-  final FirebaseFirestore _firestore;
+  final FirebaseAuth? _auth;
+  final FirebaseFirestore? _firestore;
   bool _syncing = false;
 
   final ValueNotifier<WellnessSyncStatus> status =
       ValueNotifier<WellnessSyncStatus>(WellnessSyncStatus.idle);
   final ValueNotifier<DateTime?> lastSynced = ValueNotifier<DateTime?>(null);
 
-  User? get currentUser => _auth.currentUser;
+  User? get currentUser => _auth?.currentUser;
   bool get canSync => currentUser != null && !currentUser!.isAnonymous;
   String? get currentUid => canSync ? currentUser!.uid : null;
 
   Future<bool> syncNow() async {
-    if (!canSync || _syncing) return false;
+    if (!canSync || _firestore == null || _syncing) return false;
     _syncing = true;
     status.value = WellnessSyncStatus.syncing;
     final uid = currentUser!.uid;
@@ -40,7 +46,7 @@ class WellnessSyncService {
     debugPrint('[WellnessSync] sync start uid=$uid');
     try {
       final collection =
-          _firestore.collection('wellness-v1').doc(uid).collection('sessions');
+          _firestore!.collection('wellness-v1').doc(uid).collection('sessions');
       final cloudSnapshot = await collection.get();
       debugPrint(
         '[WellnessSync] read cloud sessions: ${cloudSnapshot.docs.length}',
@@ -74,7 +80,7 @@ class WellnessSyncService {
       debugPrint('[WellnessSync] uploading ${pending.length} pending sessions');
       for (var offset = 0; offset < pending.length; offset += 450) {
         final chunk = pending.skip(offset).take(450).toList(growable: false);
-        final batch = _firestore.batch();
+        final batch = _firestore!.batch();
         for (final session in chunk) {
           batch.set(
             collection.doc(session.id),
@@ -110,7 +116,7 @@ class WellnessSyncService {
   Future<void> _syncDailySummaries(String uid, String ownerId) async {
     final summaries = await _database.dailySummaries(ownerId);
     final collection =
-        _firestore.collection('wellness-v1').doc(uid).collection('daily');
+        _firestore!.collection('wellness-v1').doc(uid).collection('daily');
     final remote = await collection.get();
     final remoteById = <String, Map<String, dynamic>>{
       for (final doc in remote.docs) doc.id: doc.data(),
@@ -142,7 +148,7 @@ class WellnessSyncService {
           ),
     ];
     for (var offset = 0; offset < operations.length; offset += 450) {
-      final batch = _firestore.batch();
+      final batch = _firestore!.batch();
       for (final operation in operations.skip(offset).take(450)) {
         if (operation.data == null) {
           batch.delete(operation.reference);
@@ -155,20 +161,23 @@ class WellnessSyncService {
   }
 
   Future<void> deleteRemoteAccountData(String uid) async {
+    final firestore = _firestore;
+    if (firestore == null) return;
+
     for (final child in const <String>['sessions', 'daily']) {
       final collection =
-          _firestore.collection('wellness-v1').doc(uid).collection(child);
+          firestore.collection('wellness-v1').doc(uid).collection(child);
       while (true) {
         final snapshot = await collection.limit(450).get();
         if (snapshot.docs.isEmpty) break;
-        final batch = _firestore.batch();
+        final batch = firestore.batch();
         for (final doc in snapshot.docs) {
           batch.delete(doc.reference);
         }
         await batch.commit();
       }
     }
-    await _firestore.collection('wellness-v1').doc(uid).delete();
+    await firestore.collection('wellness-v1').doc(uid).delete();
   }
 }
 

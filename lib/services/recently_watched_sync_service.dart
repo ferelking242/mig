@@ -67,8 +67,9 @@ class RecentlyWatchedSyncService {
 
   static const Duration _operationTimeout = Duration(seconds: 45);
 
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  late FirebaseAuth _auth;
+  late FirebaseFirestore _firestore;
+  bool _configured = false;
   final RecentlyWatchedMoviesController _movieDb =
       RecentlyWatchedMoviesController();
   final RecentlyWatchedEpisodeController _episodeDb =
@@ -83,10 +84,19 @@ class RecentlyWatchedSyncService {
   bool _isSyncing = false;
   StreamSubscription<User?>? _authSubscription;
 
-  User? get currentUser => _auth.currentUser;
+  User? get currentUser => _configured ? _auth.currentUser : null;
   bool get canSync => currentUser != null && !currentUser!.isAnonymous;
 
   Future<void> init() async {
+    try {
+      _auth = FirebaseAuth.instance;
+      _firestore = FirebaseFirestore.instance;
+      _configured = true;
+    } catch (error) {
+      debugPrint('Recently watched cloud sync is unavailable: $error');
+      return;
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final millis = prefs.getInt(_lastSyncedKey);
     if (millis != null) {

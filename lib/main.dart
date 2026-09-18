@@ -42,7 +42,17 @@ RecentProvider recentProvider = RecentProvider();
 BookmarkProvider bookmarkProvider = BookmarkProvider();
 AppDependencyProvider appDependencyProvider = AppDependencyProvider();
 WellnessProvider wellnessProvider = WellnessProvider.instance;
-final Future<FirebaseApp> _initialization = Firebase.initializeApp();
+bool firebaseAvailable = false;
+
+Future<bool> _tryInitializeFirebase() async {
+  try {
+    await Firebase.initializeApp().timeout(const Duration(seconds: 8));
+    return true;
+  } catch (error) {
+    debugPrint('Firebase is unavailable; continuing in offline mode: $error');
+    return false;
+  }
+}
 
 bool _isRecoverableImageError(FlutterErrorDetails details) {
   final context = details.context?.toString() ?? '';
@@ -64,20 +74,31 @@ Future<DevicePresentation> appInitialize({
   // Let Flutter paint behind Android's transparent gesture-navigation area.
   // Individual surfaces remain responsible for applying SafeArea padding to
   // interactive content.
-  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  try {
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  } catch (error) {
+    debugPrint('Unable to configure edge-to-edge mode: $error');
+  }
 
-  // Firebase-dependent services and providers must not be accessed until the
-  // default app has finished initializing.
-  await _initialization;
+  firebaseAvailable = await _tryInitializeFirebase();
 
   // Surface uncaught Dart and platform errors to Crashlytics. Installed only
   // after Firebase initialization so the recorder is always ready.
   FlutterError.onError = (details) {
     if (_isRecoverableImageError(details)) return;
-    FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    if (firebaseAvailable) {
+      FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    } else {
+      FlutterError.dumpErrorToConsole(details);
+    }
   };
   PlatformDispatcher.instance.onError = (error, stackTrace) {
-    FirebaseCrashlytics.instance.recordError(error, stackTrace, fatal: true);
+    if (firebaseAvailable) {
+      FirebaseCrashlytics.instance.recordError(error, stackTrace, fatal: true);
+    } else {
+      debugPrint('Unhandled platform error: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
     return true;
   };
 
@@ -103,12 +124,22 @@ Future<DevicePresentation> appInitialize({
   //     await PlatformAssetBundle().load('assets/ca/lets-encrypt-r3.pem');
   // SecurityContext.defaultContext
   //     .setTrustedCertificatesBytes(data.buffer.asUint8List());
-  await dotenv.load(fileName: '.env');
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (error) {
+    debugPrint('Optional .env file is unavailable: $error');
+  }
   await EasyLocalization.ensureInitialized();
   sharedPrefsSingleton = await SharedPreferencesSingleton.getInstance();
   await clearVideoPlaybackCache();
-  FirebaseMessaging.onBackgroundMessage(_messageHandler);
-  await FlutterDownloader.initialize(debug: true, ignoreSsl: true);
+  if (firebaseAvailable) {
+    FirebaseMessaging.onBackgroundMessage(_messageHandler);
+  }
+  try {
+    await FlutterDownloader.initialize(debug: true, ignoreSsl: true);
+  } catch (error) {
+    debugPrint('Flutter downloader is unavailable: $error');
+  }
 
   await settingsProvider.getCurrentThemeMode();
   await settingsProvider.getCurrentMaterial3Mode();
@@ -142,7 +173,7 @@ Future<DevicePresentation> appInitialize({
   await recentProvider.fetchMovies();
   await recentProvider.fetchEpisodes();
   await bookmarkProvider.fetchBookmarks();
-  await wellnessProvider.initialize();
+  await wellnessProvider.initialize(firebaseAvailable: firebaseAvailable);
   await appDependencyProvider.getFlixQuestLogo();
   await appDependencyProvider.getOccasionalTheme();
   await appDependencyProvider.getAmbientMode();
@@ -150,13 +181,15 @@ Future<DevicePresentation> appInitialize({
   await appDependencyProvider.getTmdbProxy();
   await appDependencyProvider.getUpdateConfiguration();
 
-  await BookmarkSyncService.instance.init();
-  await RecentlyWatchedSyncService.instance.init();
+  if (firebaseAvailable) {
+    await BookmarkSyncService.instance.init();
+    await RecentlyWatchedSyncService.instance.init();
+  }
 
   return devicePresentation;
 }
 
-void main() async {
+Future<DevicePresentation> _initializeApp() async {
   final devicePresentation = await appInitialize();
   HttpOverrides.global = MyHttpOverrides();
   HomeWidgetNavigationService.configure(
@@ -167,17 +200,132 @@ void main() async {
     ),
   );
   await MediaLinkNavigationService.initialize();
-  runApp(EasyLocalization(
-    supportedLocales: Translation.all,
-    path: 'assets/translations',
-    fallbackLocale: Translation.all[0],
-    startLocale: Locale(settingsProvider.appLanguage),
-    child: FlixQuest(
-      settingsProvider: settingsProvider,
-      recentProvider: recentProvider,
-      bookmarkProvider: bookmarkProvider,
-      appDependencyProvider: appDependencyProvider,
-      devicePresentation: devicePresentation,
-    ),
-  ));
+  return devicePresentation;
+}
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const _StartupApp());
+}
+
+class _StartupApp extends StatefulWidget {
+  const _StartupApp();
+
+  @override
+  State<_StartupApp> createState() => _StartupAppState();
+}
+
+class _StartupAppState extends State<_StartupApp> {
+  late Future<DevicePresentation> _initialization;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialization = _initializeApp();
+  }
+
+  void _retry() {
+    setState(() {
+      _initialization = _initializeApp();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DevicePresentation>(
+      future: _initialization,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const _StartupScreen();
+        }
+
+        if (snapshot.hasError || !snapshot.hasData) {
+          return _StartupFailure(
+            error: snapshot.error,
+            onRetry: _retry,
+          );
+        }
+
+        return EasyLocalization(
+          supportedLocales: Translation.all,
+          path: 'assets/translations',
+          fallbackLocale: Translation.all[0],
+          startLocale: Locale(settingsProvider.appLanguage),
+          child: FlixQuest(
+            settingsProvider: settingsProvider,
+            recentProvider: recentProvider,
+            bookmarkProvider: bookmarkProvider,
+            appDependencyProvider: appDependencyProvider,
+            devicePresentation: snapshot.data!,
+            firebaseAvailable: firebaseAvailable,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _StartupScreen extends StatelessWidget {
+  const _StartupScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: Color(0xFF161716),
+        body: Center(
+          child: CircularProgressIndicator(color: Colors.white),
+        ),
+      ),
+    );
+  }
+}
+
+class _StartupFailure extends StatelessWidget {
+  const _StartupFailure({
+    required this.error,
+    required this.onRetry,
+  });
+
+  final Object? error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: const Color(0xFF161716),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'FlixQuest could not start',
+                  style: TextStyle(color: Colors.white, fontSize: 20),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: onRetry,
+                  child: const Text('Retry'),
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    error.toString(),
+                    style: const TextStyle(color: Colors.white70),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

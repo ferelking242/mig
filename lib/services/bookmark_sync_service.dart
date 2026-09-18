@@ -14,8 +14,9 @@ class BookmarkSyncService {
   BookmarkSyncService._internal();
   static final BookmarkSyncService instance = BookmarkSyncService._internal();
 
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  late FirebaseAuth _auth;
+  late FirebaseFirestore _firestore;
+  bool _configured = false;
   final MovieDatabaseController _movieDb = MovieDatabaseController();
   final TVDatabaseController _tvDb = TVDatabaseController();
 
@@ -28,6 +29,15 @@ class BookmarkSyncService {
   static const String _lastSyncedKey = 'flixquest_last_bookmark_sync';
 
   Future<void> init() async {
+    try {
+      _auth = FirebaseAuth.instance;
+      _firestore = FirebaseFirestore.instance;
+      _configured = true;
+    } catch (error) {
+      debugPrint('Bookmark cloud sync is unavailable: $error');
+      return;
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final millis = prefs.getInt(_lastSyncedKey);
     if (millis != null) {
@@ -41,7 +51,7 @@ class BookmarkSyncService {
     });
   }
 
-  User? get currentUser => _auth.currentUser;
+  User? get currentUser => _configured ? _auth.currentUser : null;
   bool get canSync => currentUser != null && !currentUser!.isAnonymous;
 
   Future<bool> checkIfDocExists(String uid) async {
