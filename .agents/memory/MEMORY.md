@@ -1,0 +1,1 @@
+- [Android resource cleanup](android-resource-cleanup.md) — remove qualifier-only resources together with deleted native features so release lint stays green.
