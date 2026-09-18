@@ -47,6 +47,13 @@ jobs:
       - name: Resolve dependencies
         run: flutter pub get
 
+      - name: Confirm cloud dependencies are absent
+        run: |
+          if grep -Eiq 'firebase|cloud_firestore|mixpanel_flutter|google_sign_in' pubspec.lock; then
+            echo "Forbidden cloud or analytics dependency found in pubspec.lock."
+            exit 1
+          fi
+
       - name: Analyze Dart code
         run: flutter analyze
 
